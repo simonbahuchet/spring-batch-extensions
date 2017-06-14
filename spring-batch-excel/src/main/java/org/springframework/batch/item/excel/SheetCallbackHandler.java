@@ -16,16 +16,11 @@
 
 package org.springframework.batch.item.excel;
 
-import org.springframework.batch.item.excel.support.rowset.RowSet;
-
 /**
- * Callback to handle skipped lines. Useful for header/footer processing.
- *
- * @author Marten Deinum
- * @since 0.5.0
+ * Callback to handle skipped sheets
  */
-public interface RowCallbackHandler {
+public interface SheetCallbackHandler {
 
-    void handleRow(Sheet sheet, RowSet rs);
+    void handleSheet(Sheet sheet);
 
 }

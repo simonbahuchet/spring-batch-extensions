@@ -44,6 +44,11 @@ public class PoiItemReader<T> extends AbstractExcelItemReader<T> {
 
     @Override
     protected Sheet getSheet(final int sheet) {
+        if (this.workbook.getNumberOfSheets() < sheet) {
+            logger.debug(String.format("Cannot access sheet %d since there are only %d sheets in the workbook",
+                    sheet, this.workbook.getNumberOfSheets()));
+            return null;
+        }
         return new PoiSheet(this.workbook.getSheetAt(sheet));
     }
 
@@ -63,8 +68,8 @@ public class PoiItemReader<T> extends AbstractExcelItemReader<T> {
         if (workbookStream != null) {
             workbookStream.close();
         }
-        this.workbook=null;
-        this.workbookStream=null;
+        this.workbook = null;
+        this.workbookStream = null;
     }
 
     /**
@@ -80,6 +85,9 @@ public class PoiItemReader<T> extends AbstractExcelItemReader<T> {
         workbookStream = resource.getInputStream();
         if (!workbookStream.markSupported() && !(workbookStream instanceof PushbackInputStream)) {
             throw new IllegalStateException("InputStream MUST either support mark/reset, or be wrapped as a PushbackInputStream");
+        }
+        if (logger.isDebugEnabled()) {
+            logger.debug(String.format("Create Workbook based on the stream coming from the excel file content"));
         }
         this.workbook = WorkbookFactory.create(workbookStream);
         this.workbook.setMissingCellPolicy(Row.CREATE_NULL_AS_BLANK);

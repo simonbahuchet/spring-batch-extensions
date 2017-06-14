@@ -1,6 +1,7 @@
 package org.springframework.batch.item.excel.mapping;
 
 import org.springframework.batch.item.excel.RowMapper;
+import org.springframework.batch.item.excel.Sheet;
 import org.springframework.batch.item.excel.support.rowset.RowSet;
 import org.springframework.batch.support.DefaultPropertyEditorRegistrar;
 import org.springframework.beans.*;
@@ -24,7 +25,7 @@ import java.util.concurrent.ConcurrentMap;
  * name in the enclosing BeanFactory, or by providing a class to instantiate
  * reflectively.<br>
  * <br>
- *
+ * <p>
  * Nested property paths, including indexed properties in maps and collections,
  * can be referenced by the {@link RowSet}names. They will be converted to
  * nested bean properties inside the prototype. The {@link RowSet} and the
@@ -32,7 +33,7 @@ import java.util.concurrent.ConcurrentMap;
  * that can be initialized. If some of the nested properties are optional (e.g.
  * collection members) they need to be removed by a post processor.<br>
  * <br>
- *
+ * <p>
  * To customize the way that {@link RowSet} values are converted to the
  * desired type for injecting into the prototype there are several choices. You
  * can inject {@link java.beans.PropertyEditor} instances directly through the
@@ -40,10 +41,10 @@ import java.util.concurrent.ConcurrentMap;
  * the {@link #createBinder(Object)} and {@link #initBinder(DataBinder)}
  * methods, or you can provide a custom {@link RowSet} implementation.<br>
  * <br>
- *
+ * <p>
  * Property name matching is "fuzzy" in the sense that it tolerates close
  * matches, as long as the match is unique. For instance:
- *
+ * <p>
  * <ul>
  * <li>Quantity = quantity (field names can be capitalised)</li>
  * <li>ISIN = isin (acronyms can be lower case bean property names, as per Java
@@ -54,11 +55,10 @@ import java.util.concurrent.ConcurrentMap;
  * <li>ORDER.CUSTOMER_ID = order.customerId (nested paths are recursively
  * checked)</li>
  * </ul>
- *
+ * <p>
  * The algorithm used to match a property name is to start with an exact match
  * and then search successively through more distant matches until precisely one
  * match is found. If more than one match is found there will be an error.
- *
  *
  * @author Marten Deinum
  * @since 0.5.0
@@ -102,10 +102,10 @@ public class BeanWrapperRowMapper<T> extends DefaultPropertyEditorRegistrar impl
 
     /**
      * The bean name (id) for an object that can be populated from the field set
-     * that will be passed into {@link #mapRow(org.springframework.batch.item.excel.support.rowset.RowSet)}. Typically a
+     * that will be passed into {@link #mapRow(Sheet, RowSet)}. Typically a
      * prototype scoped bean so that a new instance is returned for each field
      * set mapped.
-     *
+     * <p>
      * Either this property or the type property must be specified, but not
      * both.
      *
@@ -118,8 +118,8 @@ public class BeanWrapperRowMapper<T> extends DefaultPropertyEditorRegistrar impl
     /**
      * Public setter for the type of bean to create instead of using a prototype
      * bean. An object of this type will be created from its default constructor
-     * for every call to {@link #mapRow(org.springframework.batch.item.excel.support.rowset.RowSet)}.<br>
-     *
+     * for every call to {@link #mapRow(Sheet, RowSet)}.<br>
+     * <p>
      * Either this property or the prototype bean name must be specified, but
      * not both.
      *
@@ -155,7 +155,7 @@ public class BeanWrapperRowMapper<T> extends DefaultPropertyEditorRegistrar impl
      * @see org.springframework.batch.item.file.mapping.FieldSetMapper#mapFieldSet(org.springframework.batch.item.file.transform.FieldSet)
      */
     @Override
-    public T mapRow(RowSet rs) throws BindException {
+    public T mapRow(Sheet sheet, RowSet rs) throws BindException {
         T copy = getBean();
         DataBinder binder = createBinder(copy);
         binder.bind(new MutablePropertyValues(getBeanProperties(copy, rs.getProperties())));
@@ -344,7 +344,7 @@ public class BeanWrapperRowMapper<T> extends DefaultPropertyEditorRegistrar impl
 
     /**
      * Public setter for the 'strict' property. If true, then
-     * {@link #mapRow(RowSet)} will fail if the RowSet contains fields
+     * {@link #mapRow(Sheet, RowSet)} will fail if the RowSet contains fields
      * that cannot be mapped to the bean.
      *
      * @param strict fail if non-mappable properties are found

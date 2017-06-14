@@ -50,7 +50,7 @@ public abstract class AbstractExcelItemReaderTests  {
         this.itemReader.setRowMapper(new PassThroughRowMapper());
         this.itemReader.setSkippedRowsCallback(new RowCallbackHandler() {
 
-            public void handleRow(RowSet rs) {
+            public void handleRow(Sheet sheet, RowSet rs) {
                 logger.info("Skipping: " + StringUtils.arrayToCommaDelimitedString(rs.getCurrentRow()));
             }
         });

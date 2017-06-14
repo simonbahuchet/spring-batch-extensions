@@ -44,7 +44,7 @@ public class BeanWrapperRowMapperTest {
         rs.next();
         rs.next();
 
-        Player p = mapper.mapRow(rs);
+        Player p = mapper.mapRow(sheet, rs);
         assertNotNull(p);
         assertEquals("AbduKa00", p.getId());
         assertEquals("Abdul-Jabbar", p.getLastName());
@@ -73,7 +73,7 @@ public class BeanWrapperRowMapperTest {
         RowSet rs = new DefaultRowSetFactory().create(sheet);
         rs.next();
         rs.next();
-        Player p = mapper.mapRow(rs);
+        Player p = mapper.mapRow(sheet, rs);
 
         assertNotNull(p);
         assertEquals("AbduKa00", p.getId());

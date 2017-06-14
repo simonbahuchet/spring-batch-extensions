@@ -41,7 +41,7 @@ public class PassThroughRowMapperTest {
         MockSheet sheet = new MockSheet("mock", Collections.singletonList( row));
         RowSet rs = new DefaultRowSetFactory().create(sheet);
         assertTrue(rs.next());
-        assertArrayEquals(row, this.rowMapper.mapRow(rs));
+        assertArrayEquals(row, this.rowMapper.mapRow(sheet, rs));
     }
 
 }

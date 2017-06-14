@@ -26,6 +26,10 @@ import org.springframework.beans.factory.InitializingBean;
 import org.springframework.core.io.Resource;
 import org.springframework.util.Assert;
 import org.springframework.util.ClassUtils;
+import org.springframework.util.CollectionUtils;
+
+import java.util.Collection;
+import java.util.List;
 
 /**
  * {@link org.springframework.batch.item.ItemReader} implementation to read an Excel
@@ -42,10 +46,11 @@ public abstract class AbstractExcelItemReader<T> extends AbstractItemCountingIte
     protected final Log logger = LogFactory.getLog(getClass());
     private Resource resource;
     private int linesToSkip = 0;
+    private Collection<String> sheetsToSkip;
     private int currentSheet = 0;
     private RowMapper<T> rowMapper;
     private RowCallbackHandler skippedRowsCallback;
-    private boolean noInput = false;
+    private SheetCallbackHandler skippedSheetsCallbackHandler;
     private boolean strict = true;
     private RowSetFactory rowSetFactory = new DefaultRowSetFactory();
     private RowSet rs;
@@ -61,35 +66,33 @@ public abstract class AbstractExcelItemReader<T> extends AbstractItemCountingIte
      */
     @Override
     protected T doRead() throws Exception {
-        if (this.noInput || this.rs == null) {
+
+        if (this.rs == null) {
             return null;
         }
 
         if (rs.next()) {
             try {
-                return this.rowMapper.mapRow(rs);
+                return this.rowMapper.mapRow(this.getSheet(this.currentSheet), rs);
             } catch (final Exception e) {
                 throw new ExcelFileParseException("Exception parsing Excel file.", e, this.resource.getDescription(),
                         rs.getMetaData().getSheetName(), rs.getCurrentRowIndex(), rs.getCurrentRow());
             }
         } else {
+
+            // We read the last row of the current sheet. Let's pass to the next sheet, if any
             this.currentSheet++;
-            if (this.currentSheet >= this.getNumberOfSheets()) {
-                if (logger.isDebugEnabled()) {
-                    logger.debug("No more sheets in '" + this.resource.getDescription() + "'.");
-                }
-                return null;
-            } else {
-                this.openSheet();
+
+            if (this.nextSheet()) {
                 return this.doRead();
             }
+            return null;
         }
     }
 
     @Override
     protected void doOpen() throws Exception {
         Assert.notNull(this.resource, "Input resource must be set");
-        this.noInput = true;
         if (!this.resource.exists()) {
             if (this.strict) {
                 throw new IllegalStateException("Input resource must exist (reader is in 'strict' mode): "
@@ -109,31 +112,92 @@ public abstract class AbstractExcelItemReader<T> extends AbstractItemCountingIte
         }
 
         this.openExcelFile(this.resource);
-        this.openSheet();
-        this.noInput = false;
+        this.nextSheet();
         if (logger.isDebugEnabled()) {
             logger.debug("Opened workbook [" + this.resource.getFilename() + "] with " + this.getNumberOfSheets() + " sheets.");
         }
     }
 
-    private void openSheet() {
-        final Sheet sheet = this.getSheet(this.currentSheet);
-        this.rs =rowSetFactory.create(sheet);
+    /**
+     * Go to the next available row:
+     * - skip the sheets that need to be
+     * - skipp the rows that need to be
+     *
+     * @return true if there's another data (row within a sheet) to read
+     */
+    private boolean nextSheet() {
+        final Sheet sheet = getNextAvailableSheet();
+        if (sheet == null) {
+            return false;
+        }
 
-
+        this.rs = rowSetFactory.create(sheet);
         if (logger.isDebugEnabled()) {
             logger.debug("Opening sheet " + sheet.getName() + ".");
         }
 
+        // Go to next row
+        boolean nextRow = nextRow(sheet);
+
+        if (logger.isDebugEnabled()) {
+            logger.debug("Opened sheet " + sheet.getName() + ", with " + sheet.getNumberOfRows() + " rows.");
+        }
+        return nextRow;
+    }
+
+    /**
+     * Go to next available row
+     *
+     * @param sheet only used for logs
+     * @return true if there's at least one row to read (not skipped)
+     */
+    private boolean nextRow(Sheet sheet) {
+        boolean noMoreRows = false;
         for (int i = 0; i < this.linesToSkip; i++) {
-            if (rs.next() && this.skippedRowsCallback != null) {
-                this.skippedRowsCallback.handleRow(rs);
+            if (rs.next()) {
+                logger.debug(String.format("[%s] Skipping line %d", sheet.getName(), i));
+                if (this.skippedRowsCallback != null) {
+                    this.skippedRowsCallback.handleRow(sheet, rs);
+                }
+            } else {
+                noMoreRows = true;
+                break;
             }
         }
-        if (logger.isDebugEnabled()) {
-            logger.debug("Openend sheet " + sheet.getName() + ", with " + sheet.getNumberOfRows() + " rows.");
+        if (noMoreRows) {
+            logger.debug(String.format("[%s] All rows have been skipped", sheet.getName()));
+            return false;
         }
 
+        // There is at least one row within the sheet, that we can read
+        return true;
+    }
+
+    /**
+     * Iterate over the sheets until the last one. Skip the ones that are 'skippable'
+     *
+     * @return
+     */
+    Sheet getNextAvailableSheet() {
+        if (this.currentSheet >= this.getNumberOfSheets()) {
+            if (logger.isDebugEnabled()) {
+                logger.debug("No more sheets in '" + this.resource.getDescription() + "'.");
+            }
+            return null;
+        }
+
+        final Sheet sheet = this.getSheet(this.currentSheet);
+
+        if (!CollectionUtils.isEmpty(this.sheetsToSkip) && this.sheetsToSkip.contains(sheet.getName())) {
+            logger.debug(String.format("Skipping sheet %s", sheet.getName()));
+            if (skippedSheetsCallbackHandler != null) {
+                skippedSheetsCallbackHandler.handleSheet(sheet);
+            }
+            this.currentSheet++;
+            return getNextAvailableSheet();
+        } else {
+            return sheet;
+        }
     }
 
     /**
@@ -160,7 +224,6 @@ public abstract class AbstractExcelItemReader<T> extends AbstractItemCountingIte
     }
 
     /**
-     *
      * @param sheet the sheet index
      * @return the sheet or <code>null</code> when no sheet available.
      */
@@ -174,7 +237,6 @@ public abstract class AbstractExcelItemReader<T> extends AbstractItemCountingIte
     protected abstract int getNumberOfSheets();
 
     /**
-     *
      * @param resource {@code Resource} pointing to the Excel file to read
      * @throws Exception when the Excel sheet cannot be accessed
      */
@@ -214,5 +276,33 @@ public abstract class AbstractExcelItemReader<T> extends AbstractItemCountingIte
      */
     public void setSkippedRowsCallback(final RowCallbackHandler skippedRowsCallback) {
         this.skippedRowsCallback = skippedRowsCallback;
+    }
+
+    /**
+     * @param skippedRowsCallback will be called for each one of the initial skipped lines before any items are read.
+     */
+    public void setSkippedSheetsCallback(final RowCallbackHandler skippedRowsCallback) {
+        this.skippedRowsCallback = skippedRowsCallback;
+    }
+
+    /**
+     * @param sheetsToSkip name of the sheets to skip
+     */
+    public void setSheetsToSkip(List<String> sheetsToSkip) {
+        this.sheetsToSkip = sheetsToSkip;
+    }
+
+    /**
+     * @return the names of the sheets to skip
+     */
+    public Collection<String> getSheetsToSkip() {
+        return sheetsToSkip;
+    }
+
+    /**
+     * @param skippedSheetsCallbackHandler a handler that is called every time a sheet is skipped
+     */
+    public void setSkippedSheetsCallbackHandler(SheetCallbackHandler skippedSheetsCallbackHandler) {
+        this.skippedSheetsCallbackHandler = skippedSheetsCallbackHandler;
     }
 }
